@@ -12,6 +12,8 @@ Docker Desktop (macOS) or Docker Engine with BuildKit is required.
 The first run builds the image and installs app dependencies; later runs use caches.
 
 Optional environment variables:
+  AWS_KEY_ID     Alias for AWS_ACCESS_KEY_ID
+  AWS_SECRET_KEY Alias for AWS_SECRET_ACCESS_KEY
   DEV_PORT       Host port for the app (default: 3000, bound to localhost)
   DEV_AWS_DIR    Existing AWS config directory to mount read/write (opt-in)
   DEV_CA_CERT    Extra CA certificate for corporate HTTPS proxies
@@ -21,6 +23,19 @@ AWS credentials can instead be configured entirely inside the container with
 'aws configure sso' and 'aws sso login --use-device-code --no-browser'.
 HELP
   exit 0
+fi
+
+# Translate shorthand without putting credential values into Docker arguments.
+# Standard AWS variables take precedence when both forms are provided.
+if [[ -n "${AWS_KEY_ID:-}" && -z "${AWS_ACCESS_KEY_ID:-}" ]]; then
+  export AWS_ACCESS_KEY_ID="$AWS_KEY_ID"
+fi
+if [[ -n "${AWS_SECRET_KEY:-}" && -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+  export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_KEY"
+fi
+if [[ -n "${AWS_KEY_ID:-}${AWS_SECRET_KEY:-}" ]] && [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+  echo 'Provide both an AWS key ID and secret key.' >&2
+  exit 1
 fi
 
 command -v docker >/dev/null 2>&1 || { echo 'Install and start Docker Desktop, then run ./dev again.' >&2; exit 1; }
