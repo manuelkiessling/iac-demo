@@ -1,0 +1,12 @@
+node_modules/
+.angular/
+app/dist/
+app/artifact/
+infrastructure/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+*.zip
+.DS_Store

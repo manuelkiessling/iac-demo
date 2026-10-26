@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "projects": {
+    "todo": {
+      "projectType": "application", "root": "", "sourceRoot": "src/client",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/client/main.ts", "index": "src/client/index.html",
+            "tsConfig": "tsconfig.client.json",
+            "outputPath": { "base": "dist/public", "browser": "" },
+            "styles": ["src/client/styles.css"], "outputHashing": "all",
+            "budgets": [{ "type": "initial", "maximumWarning": "500kB", "maximumError": "1MB" }]
+          }
+        }
+      }
+    }
+  },
+  "cli": { "analytics": false }
+}

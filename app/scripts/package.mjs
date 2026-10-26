@@ -1,0 +1,10 @@
+import { cp, mkdir, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+await rm('artifact', { recursive: true, force: true });
+await mkdir('artifact');
+await cp('dist/server', 'artifact/server', { recursive: true, filter: path => !path.endsWith('.test.js') });
+await cp('dist/public', 'artifact/public', { recursive: true });
+await cp('package.json', 'artifact/package.json');
+await cp('package-lock.json', 'artifact/package-lock.json');
+execFileSync('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: 'artifact', stdio: 'inherit' });
+console.log('Lambda artifact ready in app/artifact. Run tofu plan in infrastructure/.');
