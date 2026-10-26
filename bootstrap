@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+if [[ "${1:-}" == --help || $# -ne 2 ]]; then
+  echo 'Inside ./dev: ./bootstrap <account|access> <plan|apply>'
+  echo 'Run account plan/apply first, then access plan/apply. Apply uses the saved plan.'
+  exit 0
+fi
+stage="$1"
+action="$2"
+[[ "$stage" == account || "$stage" == access ]] || { echo 'Stage must be account or access.' >&2; exit 1; }
+[[ "$action" == plan || "$action" == apply ]] || { echo 'Action must be plan or apply.' >&2; exit 1; }
+for tool in tofu aws node; do command -v "$tool" >/dev/null || { echo 'Run this command inside ./dev.' >&2; exit 1; }; done
+cd "$repo_root"
+# Check the actual AWS session before touching organization or account resources.
+aws sts get-caller-identity --output json | node --input-type=module -e '
+  import {readFileSync} from "node:fs";
+  const actual=JSON.parse(readFileSync(0,"utf8"));
+  const settings=JSON.parse(readFileSync("infrastructure/bootstrap/settings.json","utf8"));
+  if(actual.Account!==settings.management_account_id || !actual.Arn.includes(":assumed-role/")) {
+    console.error("Bootstrap requires a non-root administrator role in the configured management account.");
+    process.exit(1);
+  }
+  console.log("Bootstrap session verified for management account " + actual.Account);
+'
+if [[ "$stage" == access ]]; then
+  export TF_VAR_project_account_id="$(tofu -chdir=infrastructure/bootstrap/account output -raw project_account_id)"
+fi
+bootstrap_dir="infrastructure/bootstrap/$stage"
+if [[ "$action" == apply && ! -f "$bootstrap_dir/bootstrap.tfplan" ]]; then
+  echo 'Run this stage with plan first.' >&2
+  exit 1
+fi
+tofu -chdir="$bootstrap_dir" init -input=false
+if [[ "$action" == plan ]]; then
+  tofu -chdir="$bootstrap_dir" plan -input=false -out=bootstrap.tfplan
+else
+  tofu -chdir="$bootstrap_dir" apply bootstrap.tfplan
+  rm "$bootstrap_dir/bootstrap.tfplan"
+  if [[ "$stage" == access ]]; then
+    tofu -chdir="$bootstrap_dir" output -json application_configuration | node --input-type=module -e '
+      import {readFileSync,writeFileSync} from "node:fs";
+      const config=JSON.parse(readFileSync(0,"utf8"));
+      writeFileSync("infrastructure/project.generated.auto.tfvars.json",JSON.stringify(config.variables,null,2)+"\n");
+      writeFileSync("infrastructure/backend.generated.hcl",Object.entries(config.backend).map(([k,v])=>`${k} = ${JSON.stringify(v)}`).join("\n")+"\n");
+      console.log("Application configuration generated. Use project permission set: " + config.permission_set);
+    '
+  fi
+fi
