@@ -20,7 +20,7 @@ Browser → HTTPS Lambda Function URL → NestJS → DynamoDB
 
 ## Run locally
 
-Install Node.js 24.15+ (24.x) and npm, then:
+Install Node.js 24.22.1 (24.x) and npm 12.2.1, then:
 
 ```sh
 cd app
@@ -39,7 +39,7 @@ npm run package  # compile Angular + NestJS, install only runtime deps into arti
 
 ## Deploy to AWS
 
-Install OpenTofu 1.9+ and configure your AWS CLI/SDK credentials, for example through
+Install OpenTofu 1.13.2+ and configure your AWS CLI/SDK credentials, for example through
 an AWS SSO profile. The identity needs permission to manage the resources declared
 in `infrastructure/`, including IAM roles and policies. No credentials go in code.
 
@@ -78,3 +78,19 @@ tofu destroy  # removes the function, public URL, table (including all Todos), I
 CI builds and tests the application and validates OpenTofu without AWS credentials.
 It never applies infrastructure. The committed `.terraform.lock.hcl` pins provider versions for CI and local
 development.
+
+## Toolchain versions
+
+Use the latest stable releases compatible with the deployed runtime and frameworks.
+Direct npm dependencies are pinned and `package-lock.json` locks the full tree;
+`.terraform.lock.hcl` locks providers. CI uses explicit action and OpenTofu versions.
+
+As checked on 2026-10-26: Angular 22.2.3 (CLI/build 22.2.4), NestJS 12.2.0,
+TypeScript 6.0.3, Node.js 24.22.1, npm 12.2.1 and OpenTofu 1.13.2. AWS provider 6.70.0 and archive
+provider 2.8.1 are current. TypeScript 7 is newer but outside Angular 22's supported
+peer range; Node types stay on 24 to match Lambda's Node.js 24 runtime.
+
+To refresh, check npm `latest` tags and peer requirements, update `package.json`,
+run `npm install` and rebuild/test/package. For providers, run `tofu init -upgrade`,
+then `tofu fmt -check` and `tofu validate`. Commit both lockfiles with any toolchain
+or version changes. CI checks changes without deploying AWS resources.
