@@ -57,8 +57,11 @@ The project's non-secret AWS setup is recorded in
 [`infrastructure/bootstrap/settings.json`](infrastructure/bootstrap/settings.json):
 the new project account's email, its parent **Other** OU, and the existing
 organization instance of IAM Identity Center in Frankfurt (`eu-central-1`).
+The existing Identity Center user `manuel@kiessling.net` is your organization-wide
+human identity. The project bootstrap will look up and reuse that user; its creation,
+password, MFA and organization administration remain outside the project lifecycle.
 The bootstrap implementation will use these settings to provision the project
-account and its access. Keep credentials and authentication tokens outside this file.
+account and its project-specific access. Keep credentials and authentication tokens outside this file.
 
 ## Deploy to AWS
 
