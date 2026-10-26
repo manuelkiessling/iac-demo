@@ -18,13 +18,27 @@ Browser → HTTPS Lambda Function URL → NestJS → DynamoDB
                                       └─ Angular static files
 ```
 
-## Run locally
+## Development shell (Docker)
 
-Install Node.js 24.22.1 (24.x) and npm 12.2.1, then:
+Install Docker Desktop on macOS (Apple Silicon and Intel are supported), clone
+this repository, and run:
+
+```sh
+./dev
+```
+
+This builds a cached image with the pinned Node.js, npm, OpenTofu and AWS CLI v2,
+installs locked app dependencies, and opens Bash in `/workspace`. No host Node.js,
+npm, OpenTofu or AWS CLI is required. Docker Engine with BuildKit also works on
+Linux. First startup downloads the tools; subsequent runs reuse image layers,
+packages and providers. Updating the version files or Dockerfile rebuilds the
+relevant layers automatically. Dependency installation reruns when the lockfile,
+package settings, Node/npm version or CPU architecture changes.
+
+Inside the shell:
 
 ```sh
 cd app
-npm ci
 npm run dev
 ```
 
@@ -39,8 +53,24 @@ npm run package  # compile Angular + NestJS, install only runtime deps into arti
 
 ## Deploy to AWS
 
-Install OpenTofu 1.13.2+ and configure your AWS CLI/SDK credentials, for example through
-an AWS SSO profile. The identity needs permission to manage the resources declared
+Start `./dev` and configure AWS inside the container. AWS configuration, SSO cache
+and shell home persist in a Docker volume, so a host AWS CLI is unnecessary:
+
+```sh
+aws configure sso --profile demo --use-device-code --no-browser
+aws sso login --profile demo --use-device-code --no-browser
+export AWS_PROFILE=demo
+aws sts get-caller-identity
+```
+
+Open the printed device-login URL in your host browser. If SSO is unavailable,
+`aws configure --profile demo` also works. To reuse an existing host profile
+instead, explicitly opt in with `DEV_AWS_DIR="$HOME/.aws" AWS_PROFILE=demo ./dev`.
+That directory is mounted read/write so SSO can refresh its cache. Standard AWS
+credential/region variables and `TF_VAR_aws_region`/`TF_VAR_name` are passed through
+when set. Credentials are never copied into the image or repository.
+
+The identity needs permission to manage the resources declared
 in `infrastructure/`, including IAM roles and policies. No credentials go in code.
 
 ```sh
@@ -79,11 +109,41 @@ CI builds and tests the application and validates OpenTofu without AWS credentia
 It never applies infrastructure. The committed `.terraform.lock.hcl` pins provider versions for CI and local
 development.
 
+## Files, ports and caches
+
+The checkout is mounted into `/workspace`: edit on the host or inside the shell.
+Generated builds and OpenTofu state remain in the checkout. Linux `node_modules`,
+`.terraform` and the shell home (including AWS credentials) live in separate Docker
+volumes scoped to this checkout. They survive `exit` and are not committed. Moving
+the checkout changes the default volume namespace; set `DEV_PROJECT=my-demo` for
+an explicit stable namespace. Keep the local state files to manage the deployment.
+Removing a Docker volume also removes any credentials or caches stored in it.
+
+The local server listens on all container interfaces, with Docker publishing only
+on host loopback. Use `DEV_PORT=3001 ./dev` to choose another host port, then open
+http://localhost:3001. Commands can also be run directly, without opening a shell:
+
+```sh
+./dev npm --prefix app test
+./dev tofu -chdir=infrastructure validate
+```
+
+`./dev --help` lists options. For a corporate TLS proxy, set
+`DEV_CA_CERT=/absolute/path/to/ca.pem`; the certificate is mounted during builds
+and runs, rather than stored in the image. No Docker socket is mounted into the
+shell. Tools run under your UID/GID so Linux bind mounts do not produce root-owned
+files.
+
+If you prefer working without Docker, install Node.js 24.22.1, npm 12.2.1,
+OpenTofu 1.13.2 and AWS CLI 2.38.5 yourself, then run `npm ci` in `app/`.
+
 ## Toolchain versions
 
 Use the latest stable releases compatible with the deployed runtime and frameworks.
 Direct npm dependencies are pinned and `package-lock.json` locks the full tree;
-`.terraform.lock.hcl` locks providers. CI uses explicit action and OpenTofu versions.
+`.terraform.lock.hcl` locks providers. `.node-version`, `.opentofu-version`,
+`.aws-cli-version` and the npm `packageManager` field also drive `./dev`.
+CI runs the same `./dev` envelope, using an explicit checkout action version.
 
 As checked on 2026-10-26: Angular 22.2.3 (CLI/build 22.2.4), NestJS 12.2.0,
 TypeScript 6.0.3, Node.js 24.22.1, npm 12.2.1 and OpenTofu 1.13.2. AWS provider 6.70.0 and archive

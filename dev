@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == --help ]]; then
+  cat <<'HELP'
+Usage: ./dev [command [args...]]
+
+Open a shell with Node.js, npm, OpenTofu and AWS CLI installed.
+With arguments, run that command instead: ./dev npm --prefix app test
+
+Docker Desktop (macOS) or Docker Engine with BuildKit is required.
+The first run builds the image and installs app dependencies; later runs use caches.
+
+Optional environment variables:
+  DEV_PORT       Host port for the app (default: 3000, bound to localhost)
+  DEV_AWS_DIR    Existing AWS config directory to mount read/write (opt-in)
+  DEV_CA_CERT    Extra CA certificate for corporate HTTPS proxies
+  DEV_PROJECT    Docker cache namespace (default: based on this checkout's path)
+
+AWS credentials can instead be configured entirely inside the container with
+'aws configure sso' and 'aws sso login --use-device-code --no-browser'.
+HELP
+  exit 0
+fi
+
+command -v docker >/dev/null 2>&1 || { echo 'Install and start Docker Desktop, then run ./dev again.' >&2; exit 1; }
+docker info >/dev/null || { echo 'Docker is unavailable. Start Docker Desktop or Docker Engine and retry.' >&2; exit 1; }
+repo_root="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+project="${DEV_PROJECT:-iac-demo-$(printf '%s' "$repo_root" | cksum | awk '{print $1}')}"
+[[ "$project" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || { echo 'DEV_PROJECT must be a Docker-compatible name.' >&2; exit 1; }
+node_version="$(tr -d '\r\n' < "$repo_root/.node-version")"
+tofu_version="$(tr -d '\r\n' < "$repo_root/.opentofu-version")"
+aws_version="$(tr -d '\r\n' < "$repo_root/.aws-cli-version")"
+npm_version="$(sed -n 's/.*"packageManager": "npm@\([^"]*\)".*/\1/p' "$repo_root/app/package.json")"
+[[ -n "$npm_version" ]] || { echo 'Missing npm packageManager version in app/package.json.' >&2; exit 1; }
+
+build_args=(--file "$repo_root/docker/Dockerfile" --tag "iac-demo-dev:$project"
+  --build-arg "NODE_VERSION=$node_version" --build-arg "NPM_VERSION=$npm_version"
+  --build-arg "OPENTOFU_VERSION=$tofu_version" --build-arg "AWS_CLI_VERSION=$aws_version"
+  --build-arg "DEV_UID=$(id -u)" --build-arg "DEV_GID=$(id -g)")
+run_args=(--rm --init --interactive --workdir /workspace
+  --mount "type=bind,source=$repo_root,target=/workspace"
+  --mount "type=volume,source=$project-home,target=/home/node"
+  --mount "type=volume,source=$project-node-modules,target=/workspace/app/node_modules"
+  --mount "type=volume,source=$project-tofu,target=/workspace/infrastructure/.terraform"
+  --publish "127.0.0.1:${DEV_PORT:-3000}:3000"
+  --env HOST=0.0.0.0)
+if [[ -t 0 && -t 1 ]]; then run_args+=(--tty); fi
+for variable in AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN TF_VAR_aws_region TF_VAR_name; do
+  run_args+=(--env "$variable")
+done
+if [[ -n "${DEV_AWS_DIR:-}" ]]; then
+  [[ -d "$DEV_AWS_DIR" ]] || { echo 'DEV_AWS_DIR must be an existing directory.' >&2; exit 1; }
+  aws_dir="$(cd -- "$DEV_AWS_DIR" && pwd -P)"
+  run_args+=(--mount "type=bind,source=$aws_dir,target=/home/node/.aws")
+fi
+if [[ -n "${DEV_CA_CERT:-}" ]]; then
+  [[ -f "$DEV_CA_CERT" ]] || { echo 'DEV_CA_CERT must be an existing certificate file.' >&2; exit 1; }
+  cert_path="$(cd -- "$(dirname "$DEV_CA_CERT")" && pwd -P)/$(basename "$DEV_CA_CERT")"
+  build_args+=(--secret "id=proxy_ca,src=$cert_path")
+  run_args+=(--mount "type=bind,source=$cert_path,target=/run/dev-ca.crt,readonly" --env DEV_CA_CERT=/run/dev-ca.crt)
+fi
+
+docker build "${build_args[@]}" "$repo_root"
+if [[ $# -eq 0 ]]; then set -- bash; fi
+exec docker run "${run_args[@]}" "iac-demo-dev:$project" "$@"
