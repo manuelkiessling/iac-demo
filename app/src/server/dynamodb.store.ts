@@ -20,12 +20,14 @@ export class DynamoTodoStore extends TodoStore {
   }
   async update(id: string, patch: TodoPatch): Promise<Todo | undefined> {
     const entries = Object.entries(patch);
+    const set = entries.flatMap(([, value], i) => value !== null ? [`#f${i} = :v${i}`] : []);
+    const remove = entries.flatMap(([, value], i) => value === null ? [`#f${i}`] : []);
     try {
       const result = await this.client.send(new UpdateCommand({
         TableName: this.tableName, Key: { id }, ConditionExpression: 'attribute_exists(id)',
-        UpdateExpression: 'SET ' + entries.map((_, i) => `#f${i} = :v${i}`).join(', '),
+        UpdateExpression: [set.length ? 'SET ' + set.join(', ') : '', remove.length ? 'REMOVE ' + remove.join(', ') : ''].filter(Boolean).join(' '),
         ExpressionAttributeNames: Object.fromEntries(entries.map(([key], i) => [`#f${i}`, key])),
-        ExpressionAttributeValues: Object.fromEntries(entries.map(([, value], i) => [`:v${i}`, value])),
+        ExpressionAttributeValues: Object.fromEntries(entries.flatMap(([, value], i) => value !== null ? [[`:v${i}`, value]] : [])),
         ReturnValues: 'ALL_NEW',
       }));
       return result.Attributes as Todo;

@@ -3,8 +3,9 @@ export interface Todo {
   title: string;
   completed: boolean;
   createdAt: string;
+  expiresAt?: number;
 }
-export type TodoPatch = Partial<Pick<Todo, 'title' | 'completed'>>;
+export type TodoPatch = Partial<Pick<Todo, 'title' | 'completed'>> & { expiresAt?: number | null };
 export abstract class TodoStore {
   abstract list(): Promise<Todo[]>;
   abstract create(todo: Todo): Promise<void>;
@@ -18,7 +19,10 @@ export class MemoryTodoStore extends TodoStore {
   async update(id: string, patch: TodoPatch) {
     const todo = this.todos.get(id);
     if (!todo) return undefined;
-    const updated = { ...todo, ...patch };
+    const { expiresAt, ...fields } = patch;
+    const updated = { ...todo, ...fields };
+    if (expiresAt === null) delete updated.expiresAt;
+    else if (expiresAt !== undefined) updated.expiresAt = expiresAt;
     this.todos.set(id, updated);
     return { ...updated };
   }
