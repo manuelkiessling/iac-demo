@@ -7,5 +7,6 @@
   "identity_center_region": "eu-central-1",
   "identity_center_instance_type": "organization",
   "identity_center_replication": "single-region",
-  "identity_center_user_name": "manuel@kiessling.net"
+  "identity_center_user_name": "manuel@kiessling.net",
+  "management_account_id": "071157021432"
 }

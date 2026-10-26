@@ -63,6 +63,23 @@ password, MFA and organization administration remain outside the project lifecyc
 The bootstrap implementation will use these settings to provision the project
 account and its project-specific access. Keep credentials and authentication tokens outside this file.
 
+Your existing user now has administrative access to the management account recorded
+in `management_account_id`. Configure its non-root CLI session inside `./dev`:
+
+```sh
+aws configure sso --profile organization-admin --use-device-code --no-browser
+aws sso login --profile organization-admin --use-device-code --no-browser
+aws sts get-caller-identity --profile organization-admin
+```
+
+Choose the Identity Center Region `eu-central-1`, the management account, and the
+permission set granting AdministratorAccess. The SSO start/issuer URL is available
+in the Identity Center console. Verify that the returned account matches the saved
+management account ID and the ARN is an `assumed-role/AWSReservedSSO_...` session.
+This session is for organization/project bootstrap; application deployment will use
+the project member account once provisioned.
+
+
 ## Deploy to AWS
 
 You can pass credentials when starting the shell:
