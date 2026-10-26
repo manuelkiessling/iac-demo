@@ -25,3 +25,5 @@ input[type=checkbox] { accent-color: #244e43; width: 18px; height: 18px; flex-sh
 footer { text-align: center; font-size: .78rem; color: #718277; line-height: 1.8; margin-top: 32px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 @media (max-width: 480px) { main { padding: 16px; margin: 4vh auto; } section { padding: 16px; } .add-form { flex-wrap: wrap; } .add-form input { flex-basis: 100%; } }
+
+.retention { color: #61716b; font-size: .8rem; margin: 18px 0 0; line-height: 1.6; }

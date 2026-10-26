@@ -2,6 +2,11 @@ resource "aws_dynamodb_table" "todos" {
   name         = "${var.name}-todos"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "id"
+  # The app writes expiresAt on completion and removes it on reopening.
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
   attribute {
     name = "id"
     type = "S"

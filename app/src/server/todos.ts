@@ -2,7 +2,9 @@ import { BadRequestException, Body, Controller, Delete, Get, HttpCode, Inject, I
 import { IsBoolean, ValidateIf, IsString, Length } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { randomUUID } from 'node:crypto';
-import { TodoStore } from './store.js';
+import { TodoStore, type TodoPatch } from './store.js';
+
+export const COMPLETED_RETENTION_SECONDS = 7 * 24 * 60 * 60;
 
 export class CreateTodo {
   @Transform(({ value }) => typeof value === 'string' ? value.trim() : value)
@@ -24,7 +26,10 @@ export class UpdateTodo {
 export class TodosService {
   constructor(@Inject(TodoStore) private readonly store: TodoStore) {}
   async list() {
-    return (await this.store.list()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const now = Math.floor(Date.now() / 1000);
+    return (await this.store.list())
+      .filter(todo => todo.expiresAt === undefined || todo.expiresAt > now)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
   async create(input: CreateTodo) {
     const todo = { id: randomUUID(), title: input.title, completed: false, createdAt: new Date().toISOString() };
@@ -32,8 +37,14 @@ export class TodosService {
     return todo;
   }
   async update(id: string, input: UpdateTodo) {
-    const patch = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+    const patch: TodoPatch = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
     if (Object.keys(patch).length === 0) throw new BadRequestException('Provide title or completed.');
+    // TTL is a numeric Unix timestamp in seconds; reopening removes the attribute.
+    if (input.completed !== undefined) {
+      patch.expiresAt = input.completed
+        ? Math.floor(Date.now() / 1000) + COMPLETED_RETENTION_SECONDS
+        : null;
+    }
     const todo = await this.store.update(id, patch);
     if (!todo) throw new NotFoundException('Todo not found.');
     return todo;

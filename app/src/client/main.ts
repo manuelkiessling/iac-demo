@@ -39,6 +39,7 @@ interface Todo { id: string; title: string; completed: boolean; createdAt: strin
             } @empty { <li class="empty">A clear slate. Add your first task above.</li> }
           </ul>
         }
+        <p class="retention">Completed tasks clear after 7 days. Reopen a task to keep it.</p>
       </section>
       <footer>Angular + NestJS · AWS Lambda + DynamoDB<br>One repository. App and infrastructure, together.</footer>
     </main>

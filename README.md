@@ -223,3 +223,27 @@ To refresh, check npm `latest` tags and peer requirements, update `package.json`
 run `npm install` and rebuild/test/package. For providers, run `tofu init -upgrade`,
 then `tofu fmt -check` and `tofu validate`. Commit both lockfiles with any toolchain
 or version changes. CI checks changes without deploying AWS resources.
+
+## Demo: a feature and its infrastructure in one commit
+
+The first implementation commit is a working CRUD app. The next commit adds
+**automatic cleanup of completed Todos** in both folders:
+
+- `app/src/server/todos.ts` writes `expiresAt` (Unix seconds) seven days ahead
+  when a task is completed. Reopening removes the attribute; renaming keeps it.
+  The Angular UI explains the behavior.
+- `infrastructure/main.tf` enables DynamoDB TTL on that exact attribute.
+  AWS deletes expired items without a cron job, worker or new service.
+
+For a walkthrough, deploy `main`, complete a task, then switch to
+`feat/completed-todo-cleanup`, rebuild and apply using the same local state.
+Show `git diff origin/main...HEAD -- app infrastructure/main.tf`:
+application behavior and infrastructure support are reviewed and shipped together.
+The table is updated in place. TTL activation can take about an hour; deletion is
+asynchronous and typically happens within a few days of expiration. The API hides
+expired tasks immediately on its next list request; the UI refreshes when opened
+or when Refresh is clicked. Existing completed tasks acquire expiry only when
+completed again after the feature is deployed.
+
+Writing the attribute alone does not enable physical deletion. Enabling TTL alone
+does not schedule any Todo for deletion. The commit needs both halves.
