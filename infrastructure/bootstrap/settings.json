@@ -1,0 +1,10 @@
+{
+  "project_name": "iac-demo",
+  "project_account_email": "kiessling.manuel+aws-iac-demo-root@gmail.com",
+  "parent_ou_id": "ou-9r8p-zeviiafj",
+  "identity_center_instance_arn": "arn:aws:sso:::instance/ssoins-69873e682bff5ad1",
+  "identity_store_id": "d-9967b16223",
+  "identity_center_region": "eu-central-1",
+  "identity_center_instance_type": "organization",
+  "identity_center_replication": "single-region"
+}
