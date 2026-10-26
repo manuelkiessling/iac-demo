@@ -1,0 +1,4 @@
+# Build only the toolchain; source code and credentials never enter image layers.
+**
+!docker/
+!docker/**
