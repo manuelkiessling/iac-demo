@@ -53,7 +53,21 @@ npm run package  # compile Angular + NestJS, install only runtime deps into arti
 
 ## Deploy to AWS
 
-Start `./dev` and configure AWS inside the container. AWS configuration, SSO cache
+You can pass credentials when starting the shell:
+
+```sh
+AWS_KEY_ID=your-access-key-id AWS_SECRET_KEY=your-secret-access-key ./dev
+# Inside the container:
+aws sts get-caller-identity
+```
+
+The launcher maps these aliases to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`,
+which the AWS CLI and OpenTofu read automatically. Standard AWS variable names are
+also supported and take precedence if both forms are set. For temporary credentials,
+include `AWS_SESSION_TOKEN`. Passed credentials exist in the container's environment;
+they are not written to the image, repository or persistent AWS configuration.
+
+Alternatively, start `./dev` and configure AWS inside the container. AWS configuration, SSO cache
 and shell home persist in a Docker volume, so a host AWS CLI is unnecessary:
 
 ```sh
