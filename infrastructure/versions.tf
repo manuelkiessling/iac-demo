@@ -1,6 +1,8 @@
 terraform {
   required_version = ">= 1.13.2, < 2.0.0"
-  backend "s3" {}
+  backend "local" {
+    path = "management-demo.tfstate"
+  }
   required_providers {
     aws = {
       source  = "hashicorp/aws"

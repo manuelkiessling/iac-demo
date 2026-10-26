@@ -1,5 +1,10 @@
 # Project bootstrap
 
+**On `demo/management-account`, skip this bootstrap.** Follow the
+[management-account deployment instructions](../../README.md#deploy-to-aws)
+instead. The files below are retained from `main` for the isolated member-account
+setup; they are not part of the fallback deployment.
+
 Run this once to establish the project account, deployment access and application
 state storage. Your existing organization, Other OU, Identity Center instance,
 personal user and management-account administrator access are reused. Bootstrap
