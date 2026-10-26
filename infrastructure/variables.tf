@@ -14,11 +14,11 @@ variable "name" {
 }
 
 variable "project_account_id" {
-  description = "Existing management account used by this demo fallback branch."
+  description = "Existing management account used for application deployment."
   type        = string
   default     = "071157021432"
   validation {
     condition     = var.project_account_id == jsondecode(file("${path.module}/bootstrap/settings.json")).management_account_id
-    error_message = "This fallback branch only deploys into management account 071157021432. Remove any member-account project.generated.auto.tfvars.json before using it."
+    error_message = "Application deployment is restricted to management account 071157021432. Remove any member-account project.generated.auto.tfvars.json before planning."
   }
 }
