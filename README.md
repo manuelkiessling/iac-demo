@@ -3,6 +3,12 @@
 A small Todo app demonstrating how one commit can change both application behavior
 and the AWS resources that make it work.
 
+The application deploys directly into existing AWS management account
+`071157021432` using your non-root Identity Center AdministratorAccess session.
+It needs no new AWS account, OU changes, project permission set or state bucket.
+`main` contains the baseline CRUD app; `feat/completed-todo-cleanup` adds a feature
+using the same AWS account, resource names and local OpenTofu state.
+
 - `app/`: Angular 22 frontend and NestJS 12 API, written in TypeScript.
 - `infrastructure/`: OpenTofu definitions for AWS Lambda, its HTTPS Function URL,
   DynamoDB and narrowly scoped IAM/logging resources.
@@ -51,59 +57,84 @@ npm test         # HTTP-level API tests using the in-memory repository
 npm run package  # compile Angular + NestJS, install only runtime deps into artifact/
 ```
 
-## Bootstrap settings
+## AWS authentication
 
-The project's non-secret AWS setup is recorded in
-[`infrastructure/bootstrap/settings.json`](infrastructure/bootstrap/settings.json):
-the new project account's email, its parent **Other** OU, and the existing
-organization instance of IAM Identity Center in Frankfurt (`eu-central-1`).
-The existing Identity Center user `manuel@kiessling.net` is your organization-wide
-human identity. The project bootstrap will look up and reuse that user; its creation,
-password, MFA and organization administration remain outside the project lifecycle.
-The [bootstrap procedure](infrastructure/bootstrap/README.md) uses these settings
-to provision the project account and its project-specific access. Keep credentials and authentication tokens outside this file.
+Your existing organization-wide Identity Center user `manuel@kiessling.net` has
+AdministratorAccess to management account `071157021432`. That session can deploy
+the application, subject to any additional account policies. The account
+ID and Identity Center details remain recorded in
+[`infrastructure/bootstrap/settings.json`](infrastructure/bootstrap/settings.json).
+Keep credentials and authentication tokens outside the repository.
 
-Your existing user now has administrative access to the management account recorded
-in `management_account_id`. Configure its non-root CLI session inside `./dev`:
+If your exported temporary credentials already work inside `./dev`, keep using
+them. Otherwise configure a non-root CLI session inside the container:
 
 ```sh
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 aws configure sso --profile organization-admin --use-device-code --no-browser
 aws sso login --profile organization-admin --use-device-code --no-browser
-aws sts get-caller-identity --profile organization-admin
+export AWS_PROFILE=organization-admin
+aws sts get-caller-identity
 ```
 
 Choose the Identity Center Region `eu-central-1`, the management account, and the
 permission set granting AdministratorAccess. The SSO start/issuer URL is available
 in the Identity Center console. Verify that the returned account matches the saved
 management account ID and the ARN is an `assumed-role/AWSReservedSSO_...` session.
-This session is for organization/project bootstrap; application deployment will use
-the project member account once provisioned.
+Use this administrator session for deployment. You do not need root credentials
+or a new IAM user. `./bootstrap` and its member-account definitions are historical
+reference material; skip them when deploying the application.
 
 
 ## Deploy to AWS
 
-First complete the [two-stage project bootstrap](infrastructure/bootstrap/README.md)
-inside `./dev`. It creates the member account, grants project deployment access and
-generates the account/backend configuration. Your management-account administrator
-session is used for bootstrap; normal deployments use the `iac-demo-deploy` project
-permission set via the `iac-demo` AWS CLI profile.
+Check out `main`, then enter the development container. If you are already inside
+`./dev`, just switch branches in that shell:
 
 ```sh
-aws sso login --profile iac-demo --use-device-code --no-browser
-export AWS_PROFILE=iac-demo
+git fetch origin
+git switch main
+git pull --ff-only origin main
+./dev  # skip if already inside
+```
+
+From `/workspace` inside the authenticated container:
+
+```sh
 aws sts get-caller-identity
 npm --prefix app run package
 cd infrastructure
-tofu init -migrate-state -backend-config=backend.generated.hcl
+tofu init -reconfigure
 tofu plan -out=demo.tfplan
+# Review the plan before applying.
 tofu apply demo.tfplan
 tofu output -raw app_url
 ```
 
+Verify the identity reports account `071157021432` and an
+`assumed-role/AWSReservedSSO_AdministratorAccess_...` ARN. The AWS provider only
+accepts this account. The plan creates the app's Lambda, public Function URL,
+DynamoDB table, execution role/policy and log group. It creates no account or
+organization resources. The execution role keeps its narrowly scoped Todo-table
+and log permissions; it does not inherit your administrator permissions and does
+not require a bootstrap-managed permissions boundary.
+
+Both `main` and `feat/completed-todo-cleanup` use local state at
+`infrastructure/management-demo.tfstate`, ignored by Git. Keep that file and its
+backup to manage and destroy the deployment. This is also the existing deployment
+state from `demo/management-account`; keep using it without migrating or renaming it.
+`-reconfigure` clears a cached S3 backend selection from an older checkout; no S3
+backend configuration is needed. Branch switching then uses the same backend and
+state. If you have a separate app deployment using remote state, continue managing
+it with that state rather than starting a second deployment.
+If you previously generated `infrastructure/project.generated.auto.tfvars.json`
+for a member account, move it out of `infrastructure/` before planning here.
+The failed account bootstrap's state is separate and can be retained unchanged.
+
 The `./dev` launcher also supports temporary credentials exported through
 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` (or the
-`AWS_KEY_ID` / `AWS_SECRET_KEY` aliases). Those credentials must identify the project
-account for application deployment. Clear exported credentials when switching to
+`AWS_KEY_ID` / `AWS_SECRET_KEY` aliases). Those credentials must identify management
+account `071157021432`. Clear exported credentials when switching to
 an SSO profile so they do not override it. The launcher does not save passed keys
 or tokens into the image, repository or persistent AWS configuration.
 
@@ -116,9 +147,8 @@ This is one **public, shared Todo list**, with no authentication. Anyone with th
 URL can read and change it. Use sample data. Requests consume billable AWS
 resources; DynamoDB uses on-demand billing and logs expire after seven days.
 The list uses a paginated table scan: suitable for this small demo, not a large
-multi-user application. Application state is remote in a private, versioned S3
-bucket with native locking. The bootstrap roots keep separate local state files;
-back those up securely to manage the account and deployment-access foundation.
+multi-user application. OpenTofu state is local, so keep a secure backup.
+Workloads in the management account share that account with your existing projects.
 
 ```sh
 cd infrastructure
@@ -129,6 +159,24 @@ CI builds and tests the application and validates all OpenTofu roots, including
 bootstrap guardrail tests with mock providers, without AWS credentials.
 It never applies infrastructure. The committed `.terraform.lock.hcl` pins provider versions for CI and local
 development.
+
+## Present the feature evolution
+
+Deploy the baseline from `main`, then switch to the feature branch:
+
+```sh
+git fetch origin
+git switch feat/completed-todo-cleanup
+git pull --ff-only origin feat/completed-todo-cleanup
+git diff origin/main...HEAD -- app infrastructure/main.tf
+```
+
+The feature changes application code and DynamoDB TTL together. Rebuild the
+package and plan/apply using the same commands and local state. Switching branches
+does not replace the account, backend or table. The cleanup PR remains unmerged.
+Keep `management-demo.tfstate` when switching between baseline and feature commits.
+Switch back with `git switch main`; rebuild and plan/apply to return the deployed
+application to the baseline.
 
 ## Files, ports and caches
 
@@ -187,8 +235,9 @@ The first implementation commit is a working CRUD app. The next commit adds
 - `infrastructure/main.tf` enables DynamoDB TTL on that exact attribute.
   AWS deletes expired items without a cron job, worker or new service.
 
-For a walkthrough, deploy the first implementation commit, complete a task, then
-check out the cleanup commit, rebuild and apply. Show `git show` for that commit:
+For a walkthrough, deploy `main`, complete a task, then switch to
+`feat/completed-todo-cleanup`, rebuild and apply using the same local state.
+Show `git diff origin/main...HEAD -- app infrastructure/main.tf`:
 application behavior and infrastructure support are reviewed and shipped together.
 The table is updated in place. TTL activation can take about an hour; deletion is
 asynchronous and typically happens within a few days of expiration. The API hides
