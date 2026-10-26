@@ -2,7 +2,7 @@ node_modules/
 .angular/
 app/dist/
 app/artifact/
-infrastructure/.terraform/
+**/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan
@@ -10,3 +10,6 @@ infrastructure/.terraform/
 !*.tfvars.example
 *.zip
 .DS_Store
+
+infrastructure/project.generated.auto.tfvars.json
+infrastructure/backend.generated.hcl

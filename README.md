@@ -60,8 +60,8 @@ organization instance of IAM Identity Center in Frankfurt (`eu-central-1`).
 The existing Identity Center user `manuel@kiessling.net` is your organization-wide
 human identity. The project bootstrap will look up and reuse that user; its creation,
 password, MFA and organization administration remain outside the project lifecycle.
-The bootstrap implementation will use these settings to provision the project
-account and its project-specific access. Keep credentials and authentication tokens outside this file.
+The [bootstrap procedure](infrastructure/bootstrap/README.md) uses these settings
+to provision the project account and its project-specific access. Keep credentials and authentication tokens outside this file.
 
 Your existing user now has administrative access to the management account recorded
 in `management_account_id`. Configure its non-root CLI session inside `./dev`:
@@ -82,53 +82,30 @@ the project member account once provisioned.
 
 ## Deploy to AWS
 
-You can pass credentials when starting the shell:
+First complete the [two-stage project bootstrap](infrastructure/bootstrap/README.md)
+inside `./dev`. It creates the member account, grants project deployment access and
+generates the account/backend configuration. Your management-account administrator
+session is used for bootstrap; normal deployments use the `iac-demo-deploy` project
+permission set via the `iac-demo` AWS CLI profile.
 
 ```sh
-AWS_KEY_ID=your-access-key-id AWS_SECRET_KEY=your-secret-access-key ./dev
-# Inside the container:
+aws sso login --profile iac-demo --use-device-code --no-browser
+export AWS_PROFILE=iac-demo
 aws sts get-caller-identity
-```
-
-The launcher maps these aliases to `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`,
-which the AWS CLI and OpenTofu read automatically. Standard AWS variable names are
-also supported and take precedence if both forms are set. For temporary credentials,
-include `AWS_SESSION_TOKEN`. Passed credentials exist in the container's environment;
-they are not written to the image, repository or persistent AWS configuration.
-
-Alternatively, start `./dev` and configure AWS inside the container. AWS configuration, SSO cache
-and shell home persist in a Docker volume, so a host AWS CLI is unnecessary:
-
-```sh
-aws configure sso --profile demo --use-device-code --no-browser
-aws sso login --profile demo --use-device-code --no-browser
-export AWS_PROFILE=demo
-aws sts get-caller-identity
-```
-
-Open the printed device-login URL in your host browser. If SSO is unavailable,
-`aws configure --profile demo` also works. To reuse an existing host profile
-instead, explicitly opt in with `DEV_AWS_DIR="$HOME/.aws" AWS_PROFILE=demo ./dev`.
-That directory is mounted read/write so SSO can refresh its cache. Standard AWS
-credential/region variables and `TF_VAR_aws_region`/`TF_VAR_name` are passed through
-when set. Credentials are never copied into the image or repository.
-
-The identity needs permission to manage the resources declared
-in `infrastructure/`, including IAM roles and policies. No credentials go in code.
-
-```sh
-cd app
-npm ci
-npm run package
-cd ../infrastructure
-# Optional: export AWS_PROFILE=your-profile
-# Optional: export TF_VAR_aws_region=eu-west-1
-# Optional: export TF_VAR_name=your-unique-demo-name
-tofu init
+npm --prefix app run package
+cd infrastructure
+tofu init -migrate-state -backend-config=backend.generated.hcl
 tofu plan -out=demo.tfplan
 tofu apply demo.tfplan
 tofu output -raw app_url
 ```
+
+The `./dev` launcher also supports temporary credentials exported through
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN` (or the
+`AWS_KEY_ID` / `AWS_SECRET_KEY` aliases). Those credentials must identify the project
+account for application deployment. Clear exported credentials when switching to
+an SSO profile so they do not override it. The launcher does not save passed keys
+or tokens into the image, repository or persistent AWS configuration.
 
 Open the output URL. To ship a change, rebuild with `npm run package`, then run
 `tofu plan` and `tofu apply`. OpenTofu hashes the ZIP, so an application code change
@@ -139,16 +116,17 @@ This is one **public, shared Todo list**, with no authentication. Anyone with th
 URL can read and change it. Use sample data. Requests consume billable AWS
 resources; DynamoDB uses on-demand billing and logs expire after seven days.
 The list uses a paginated table scan: suitable for this small demo, not a large
-multi-user application. State is local and ignored by Git; keep it to manage and
-destroy this deployment. Use a remote state backend before collaborating on an
-actual shared deployment.
+multi-user application. Application state is remote in a private, versioned S3
+bucket with native locking. The bootstrap roots keep separate local state files;
+back those up securely to manage the account and deployment-access foundation.
 
 ```sh
 cd infrastructure
 tofu destroy  # removes the function, public URL, table (including all Todos), IAM and logs
 ```
 
-CI builds and tests the application and validates OpenTofu without AWS credentials.
+CI builds and tests the application and validates all OpenTofu roots, including
+bootstrap guardrail tests with mock providers, without AWS credentials.
 It never applies infrastructure. The committed `.terraform.lock.hcl` pins provider versions for CI and local
 development.
 
@@ -156,7 +134,7 @@ development.
 
 The checkout is mounted into `/workspace`: edit on the host or inside the shell.
 Generated builds and OpenTofu state remain in the checkout. Linux `node_modules`,
-`.terraform` and the shell home (including AWS credentials) live in separate Docker
+the app stack's `.terraform` and the shell home (including AWS credentials) live in separate Docker
 volumes scoped to this checkout. They survive `exit` and are not committed. Moving
 the checkout changes the default volume namespace; set `DEV_PROJECT=my-demo` for
 an explicit stable namespace. Keep the local state files to manage the deployment.

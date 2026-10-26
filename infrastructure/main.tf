@@ -13,7 +13,8 @@ resource "aws_dynamodb_table" "todos" {
   }
 }
 resource "aws_iam_role" "app" {
-  name = "${var.name}-lambda"
+  name                 = "${var.name}-lambda"
+  permissions_boundary = "arn:aws:iam::${var.project_account_id}:policy/${var.name}-runtime-boundary"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

@@ -15,9 +15,13 @@ jobs:
             npm --version
             tofu version
             aws --version
+            node --test infrastructure/bootstrap/tests/*.test.mjs
             npm --prefix app test
             npm --prefix app run package
-            tofu -chdir=infrastructure fmt -check
-            tofu -chdir=infrastructure init -backend=false
-            tofu -chdir=infrastructure validate
+            tofu -chdir=infrastructure fmt -check -recursive
+            for root in infrastructure infrastructure/bootstrap/account infrastructure/bootstrap/access; do
+              tofu -chdir="$root" init -backend=false -input=false
+              tofu -chdir="$root" validate
+              tofu -chdir="$root" test
+            done
           '
