@@ -6,5 +6,6 @@
   "identity_store_id": "d-9967b16223",
   "identity_center_region": "eu-central-1",
   "identity_center_instance_type": "organization",
-  "identity_center_replication": "single-region"
+  "identity_center_replication": "single-region",
+  "identity_center_user_name": "manuel@kiessling.net"
 }
