@@ -51,6 +51,15 @@ npm test         # HTTP-level API tests using the in-memory repository
 npm run package  # compile Angular + NestJS, install only runtime deps into artifact/
 ```
 
+## Bootstrap settings
+
+The project's non-secret AWS setup is recorded in
+[`infrastructure/bootstrap/settings.json`](infrastructure/bootstrap/settings.json):
+the new project account's email, its parent **Other** OU, and the existing
+organization instance of IAM Identity Center in Frankfurt (`eu-central-1`).
+The bootstrap implementation will use these settings to provision the project
+account and its access. Keep credentials and authentication tokens outside this file.
+
 ## Deploy to AWS
 
 You can pass credentials when starting the shell:
